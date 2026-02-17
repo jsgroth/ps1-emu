@@ -233,17 +233,20 @@ impl EmulationThreadHandle {
 
         log::info!("Launching emulator with config:\n{config:#?}");
 
-        spawn_emu_thread(&config.memory_cards, EmulatorRunner {
-            emulator,
-            renderer: swap_chain_renderer,
-            audio_output,
-            audio_sync_threshold: config.audio.sync_threshold,
-            save_writer,
-            inputs,
-            disc_path: file_path.map(PathBuf::from),
-            save_state_path,
-            command_receiver,
-        });
+        spawn_emu_thread(
+            &config.memory_cards,
+            EmulatorRunner {
+                emulator,
+                renderer: swap_chain_renderer,
+                audio_output,
+                audio_sync_threshold: config.audio.sync_threshold,
+                save_writer,
+                inputs,
+                disc_path: file_path.map(PathBuf::from),
+                save_state_path,
+                command_receiver,
+            },
+        );
 
         let surface_renderer = SurfaceRenderer::new(
             &config.video,

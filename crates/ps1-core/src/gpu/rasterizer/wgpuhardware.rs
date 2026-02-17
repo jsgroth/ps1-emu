@@ -1119,9 +1119,11 @@ impl RasterizerInterface for WgpuRasterizer {
 
     fn cpu_to_vram_blit(&mut self, args: CpuVramBlitArgs, data: &[u16]) {
         let buffer_bind_group = self.cpu_vram_blit_pipeline.prepare(&self.device, &args, data);
-        let sync_vertex_buffer =
-            self.native_scaled_sync_pipeline
-                .prepare(&self.device, [args.x, args.y], [args.width, args.height]);
+        let sync_vertex_buffer = self.native_scaled_sync_pipeline.prepare(
+            &self.device,
+            [args.x, args.y],
+            [args.width, args.height],
+        );
 
         self.draw_commands.push(DrawCommand::CpuVramBlit {
             args,
