@@ -50,7 +50,7 @@ macro_rules! memory_map {
     }
 }
 
-impl<'a> Bus<'a> {
+impl Bus<'_> {
     // TODO memory control for main RAM and BIOS ROM
     pub fn read_u8(&mut self, address: u32) -> u32 {
         memory_map!(address, [

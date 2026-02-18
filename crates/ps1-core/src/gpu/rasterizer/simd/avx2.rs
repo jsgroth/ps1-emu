@@ -1,4 +1,5 @@
 #![allow(clippy::many_single_char_names)]
+#![allow(unsafe_op_in_unsafe_fn)]
 
 use crate::gpu::gp0::{
     DrawSettings, SemiTransparencyMode, TextureColorDepthBits, TexturePage, TextureWindow,
@@ -376,7 +377,7 @@ pub unsafe fn rasterize_triangle(
                         g = modulate_texture_color(tg, g);
                         b = modulate_texture_color(tb, b);
                     }
-                };
+                }
             }
 
             // Load the existing row of 16 pixels
@@ -426,19 +427,19 @@ pub unsafe fn rasterize_triangle(
             b = _mm256_srli_epi16::<3>(b);
 
             // If semi-transparency is enabled, blend existing colors with new colors
-            if let Some(semi_transparency_mode) = semi_transparency_mode {
-                if _mm256_testz_si256(semi_transparency_bits, _mm256_set1_epi16(!0)) == 0 {
-                    let (existing_r, existing_g, existing_b) = split_15bit_color(existing);
-                    let semi_transparency_mask =
-                        _mm256_cmpeq_epi16(semi_transparency_bits, _mm256_setzero_si256());
+            if let Some(semi_transparency_mode) = semi_transparency_mode
+                && _mm256_testz_si256(semi_transparency_bits, _mm256_set1_epi16(!0)) == 0
+            {
+                let (existing_r, existing_g, existing_b) = split_15bit_color(existing);
+                let semi_transparency_mask =
+                    _mm256_cmpeq_epi16(semi_transparency_bits, _mm256_setzero_si256());
 
-                    (r, g, b) = apply_semi_transparency(
-                        (existing_r, existing_g, existing_b),
-                        (r, g, b),
-                        semi_transparency_mask,
-                        semi_transparency_mode,
-                    );
-                }
+                (r, g, b) = apply_semi_transparency(
+                    (existing_r, existing_g, existing_b),
+                    (r, g, b),
+                    semi_transparency_mask,
+                    semi_transparency_mode,
+                );
             }
 
             // Combine color components and OR in bit 15 (either force mask bit or texel bit 15)

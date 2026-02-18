@@ -118,7 +118,7 @@ impl ReverbUnit {
                 self.output_buffer_l.push(0);
                 self.output_buffer_r.push(output_sample);
             }
-        };
+        }
 
         // Double FIR filter outputs to account for zero padding
         let filtered_l = (fir::filter(&self.output_buffer_l) << 1).clamp_to_i16();

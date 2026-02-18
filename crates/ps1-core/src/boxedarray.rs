@@ -42,7 +42,7 @@ impl<T: Copy, const LEN: usize> DerefMut for BoxedArray<T, LEN> {
     }
 }
 
-impl<const LEN: usize> Decode for BoxedArray<u8, LEN> {
+impl<const LEN: usize, Context> Decode<Context> for BoxedArray<u8, LEN> {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
         let mut array: Box<[u8; LEN]> = vec![0; LEN].into_boxed_slice().try_into().unwrap();
         decoder.reader().read(array.as_mut_slice())?;
@@ -50,7 +50,7 @@ impl<const LEN: usize> Decode for BoxedArray<u8, LEN> {
     }
 }
 
-impl<'de, const LEN: usize> BorrowDecode<'de> for BoxedArray<u8, LEN> {
+impl<'de, const LEN: usize, Context> BorrowDecode<'de, Context> for BoxedArray<u8, LEN> {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let mut array: Box<[u8; LEN]> = vec![0; LEN].into_boxed_slice().try_into().unwrap();
         decoder.reader().read(array.as_mut_slice())?;
@@ -58,7 +58,7 @@ impl<'de, const LEN: usize> BorrowDecode<'de> for BoxedArray<u8, LEN> {
     }
 }
 
-impl<const LEN: usize> Decode for BoxedArray<u16, LEN> {
+impl<const LEN: usize, Context> Decode<Context> for BoxedArray<u16, LEN> {
     fn decode<D: Decoder>(decoder: &mut D) -> Result<Self, DecodeError> {
         let mut array: Box<[u16; LEN]> = vec![0; LEN].into_boxed_slice().try_into().unwrap();
         for value in array.as_mut() {
@@ -68,7 +68,7 @@ impl<const LEN: usize> Decode for BoxedArray<u16, LEN> {
     }
 }
 
-impl<'de, const LEN: usize> BorrowDecode<'de> for BoxedArray<u16, LEN> {
+impl<'de, const LEN: usize, Context> BorrowDecode<'de, Context> for BoxedArray<u16, LEN> {
     fn borrow_decode<D: BorrowDecoder<'de>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let mut array: Box<[u16; LEN]> = vec![0; LEN].into_boxed_slice().try_into().unwrap();
         for value in array.as_mut() {

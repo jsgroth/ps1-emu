@@ -48,7 +48,7 @@ impl Color {
 impl SemiTransparencyMode {
     fn apply(self, back: u16, front: u16) -> u16 {
         match self {
-            Self::Average => apply_semi_transparency(back, front, |b, f| (b + f) / 2),
+            Self::Average => apply_semi_transparency(back, front, u16::midpoint),
             Self::Add => apply_semi_transparency(back, front, |b, f| cmp::min(31, b + f)),
             Self::Subtract => apply_semi_transparency(back, front, |b, f| {
                 cmp::max(0, (b as i16) - (f as i16)) as u16

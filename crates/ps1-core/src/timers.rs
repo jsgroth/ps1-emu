@@ -886,7 +886,7 @@ impl Timers {
 
         GpuStatus {
             in_vblank: self.gpu.in_vblank(),
-            odd_scanline: self.gpu.line % 2 != 0,
+            odd_scanline: !self.gpu.line.is_multiple_of(2),
             odd_frame: self.gpu.odd_frame,
         }
     }

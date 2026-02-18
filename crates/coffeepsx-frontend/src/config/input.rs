@@ -204,7 +204,7 @@ impl Serialize for SdlGamepadInput {
 
 struct GamepadInputDeserializeVisitor;
 
-impl<'de> Visitor<'de> for GamepadInputDeserializeVisitor {
+impl Visitor<'_> for GamepadInputDeserializeVisitor {
     type Value = SdlGamepadInput;
 
     fn expecting(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {

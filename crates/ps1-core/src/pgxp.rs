@@ -14,13 +14,13 @@ macro_rules! impl_fake_encode_decode {
             }
         }
 
-        impl Decode for $t {
+        impl<Context> Decode<Context> for $t {
             fn decode<D: Decoder>(_decoder: &mut D) -> Result<Self, DecodeError> {
                 Ok(Self::new())
             }
         }
 
-        impl<'de> BorrowDecode<'de> for $t {
+        impl<'de, Context> BorrowDecode<'de, Context> for $t {
             fn borrow_decode<D: BorrowDecoder<'de>>(_decoder: &mut D) -> Result<Self, DecodeError> {
                 Ok(Self::new())
             }

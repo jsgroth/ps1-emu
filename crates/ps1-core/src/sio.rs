@@ -16,7 +16,7 @@ use crate::scheduler::{Scheduler, SchedulerEvent, SchedulerEventType};
 use crate::sio::controllers::{DigitalController, DualShock, DualShockControllerState};
 use crate::sio::memcard::{ConnectedMemoryCard, MemoryCard};
 use crate::sio::rxfifo::RxFifo;
-use bincode::{BorrowDecode, Decode, Encode};
+use bincode::{Decode, Encode};
 use std::cmp;
 
 #[derive(Debug, Clone, Copy, Encode, Decode)]
@@ -93,17 +93,6 @@ impl TxFifoState {
     }
 }
 
-#[derive(Debug, Clone, Copy, Encode, Decode)]
-enum PortState {
-    Idle,
-    ReceivedControllerAddress,
-    SentIdLow,
-    SentIdHigh,
-    SentDigitalLow,
-    Disconnected,
-    SendingZeroes,
-}
-
 const CONTROLLER_TRANSFER_CYCLES: u32 = 500;
 const ACK_LOW_CYCLES: u64 = 100;
 
@@ -115,7 +104,7 @@ enum SerialDevice<Device> {
 }
 
 pub trait SerialDevices {
-    type Device: Encode + Decode + for<'de> BorrowDecode<'de>;
+    type Device;
 
     fn connect(&self, tx: u8, port: Port) -> Option<Self::Device>;
 
@@ -252,9 +241,9 @@ impl SerialDevices for Sio1Devices {
 }
 
 #[derive(Debug, Clone, Encode, Decode)]
-pub struct SerialPort<Devices: SerialDevices> {
+pub struct SerialPort<Devices, Device> {
     devices: Devices,
-    active_device: Option<SerialDevice<Devices::Device>>,
+    active_device: Option<SerialDevice<Device>>,
     irq_event_type: SchedulerEventType,
     tx_event_type: SchedulerEventType,
     last_update_cycles: u64,
@@ -275,8 +264,8 @@ pub struct SerialPort<Devices: SerialDevices> {
     ack_low_cycles: u16,
 }
 
-pub type SerialPort0 = SerialPort<Sio0Devices>;
-pub type SerialPort1 = SerialPort<Sio1Devices>;
+pub type SerialPort0 = SerialPort<Sio0Devices, Sio0Device>;
+pub type SerialPort1 = SerialPort<Sio1Devices, ()>;
 
 impl SerialPort0 {
     pub fn new_sio0(
@@ -353,7 +342,7 @@ impl SerialPort1 {
     }
 }
 
-impl<Devices: SerialDevices> SerialPort<Devices> {
+impl<Devices: SerialDevices> SerialPort<Devices, Devices::Device> {
     fn new(
         devices: Devices,
         irq_event_type: SchedulerEventType,
@@ -655,19 +644,18 @@ impl<Devices: SerialDevices> SerialPort<Devices> {
             self.active_device = None;
         }
 
-        if self.tx_enabled {
-            if let TxFifoState::Queued(tx) = self.tx_fifo {
-                self.tx_fifo = TxFifoState::Transferring {
-                    value: tx,
-                    cycles_remaining: CONTROLLER_TRANSFER_CYCLES,
-                    next: None,
-                };
-                scheduler.update_or_push_event(SchedulerEvent {
-                    event_type: self.tx_event_type,
-                    cpu_cycles: scheduler.cpu_cycle_counter()
-                        + u64::from(CONTROLLER_TRANSFER_CYCLES),
-                });
-            }
+        if self.tx_enabled
+            && let TxFifoState::Queued(tx) = self.tx_fifo
+        {
+            self.tx_fifo = TxFifoState::Transferring {
+                value: tx,
+                cycles_remaining: CONTROLLER_TRANSFER_CYCLES,
+                next: None,
+            };
+            scheduler.update_or_push_event(SchedulerEvent {
+                event_type: self.tx_event_type,
+                cpu_cycles: scheduler.cpu_cycle_counter() + u64::from(CONTROLLER_TRANSFER_CYCLES),
+            });
         }
 
         log::debug!("SIO0_CTRL write: {value:04X}");

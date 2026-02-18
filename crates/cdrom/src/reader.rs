@@ -87,13 +87,13 @@ impl Encode for CdRomReader {
     }
 }
 
-impl Decode for CdRomReader {
+impl<Context> Decode<Context> for CdRomReader {
     fn decode<D: Decoder>(_decoder: &mut D) -> Result<Self, DecodeError> {
         Ok(Self::default())
     }
 }
 
-impl<'de> BorrowDecode<'de> for CdRomReader {
+impl<'de, Context> BorrowDecode<'de, Context> for CdRomReader {
     fn borrow_decode<D: BorrowDecoder<'de>>(_decoder: &mut D) -> Result<Self, DecodeError> {
         Ok(Self::default())
     }

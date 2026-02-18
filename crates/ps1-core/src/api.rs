@@ -672,38 +672,3 @@ fn check_for_putchar_call(cpu: &R3000, tty_buffer: &mut String) {
         }
     }
 }
-
-struct NullOutput;
-
-impl Renderer for NullOutput {
-    type Err = String;
-
-    fn render_frame(
-        &mut self,
-        _command_buffers: impl Iterator<Item = wgpu::CommandBuffer>,
-        _frame: &wgpu::Texture,
-        _pixel_aspect_ratio: f64,
-    ) -> Result<(), Self::Err> {
-        Ok(())
-    }
-}
-
-impl AudioOutput for NullOutput {
-    type Err = String;
-
-    fn queue_samples(&mut self, _samples: &[(i16, i16)]) -> Result<(), Self::Err> {
-        Ok(())
-    }
-}
-
-impl SaveWriter for NullOutput {
-    type Err = String;
-
-    fn save_memory_card(
-        &mut self,
-        _slot: MemoryCardSlot,
-        _card_data: &[u8],
-    ) -> Result<(), Self::Err> {
-        Ok(())
-    }
-}

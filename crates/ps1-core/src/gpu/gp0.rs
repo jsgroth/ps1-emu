@@ -101,19 +101,21 @@ pub struct VramTransferFields {
     halfwords_remaining: u32,
 }
 
-#[derive(Debug, Clone, Copy, Encode, Decode)]
+#[derive(Debug, Clone, Copy, Encode, Decode, Default)]
 pub enum Gp0CommandState {
+    #[default]
     WaitingForCommand,
-    WaitingForParameters { command: DrawCommand, index: u8, remaining: u8 },
+    WaitingForParameters {
+        command: DrawCommand,
+        index: u8,
+        remaining: u8,
+    },
     WaitingForPolyline(LineCommandParameters),
     ReceivingFromCpu(VramTransferFields),
-    SendingToCpu { buffer_idx: u32, halfwords_remaining: u32 },
-}
-
-impl Default for Gp0CommandState {
-    fn default() -> Self {
-        Self::WaitingForCommand
-    }
+    SendingToCpu {
+        buffer_idx: u32,
+        halfwords_remaining: u32,
+    },
 }
 
 impl Gp0CommandState {
@@ -757,7 +759,7 @@ fn parse_signed_11_bit(word: u32) -> i32 {
 
 struct Gp0Parameters<'a>(&'a [u32]);
 
-impl<'a> Gp0Parameters<'a> {
+impl Gp0Parameters<'_> {
     fn next(&mut self) -> u32 {
         let value = self.0[0];
         self.0 = &self.0[1..];
@@ -771,7 +773,7 @@ impl<'a> Gp0Parameters<'a> {
 
 struct Gp0ParametersPgxp<'a>(&'a [u32], &'a [PreciseVertex]);
 
-impl<'a> Gp0ParametersPgxp<'a> {
+impl Gp0ParametersPgxp<'_> {
     fn next(&mut self) -> (u32, PreciseVertex) {
         let value = self.0[0];
         let vertex = self.1[0];

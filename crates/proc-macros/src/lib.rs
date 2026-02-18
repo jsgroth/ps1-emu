@@ -127,12 +127,11 @@ pub fn save_state(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         }
     };
 
-    let gen = quote! {
+    quote! {
         #struct_definition
         #to_state_impl
-    };
-
-    gen.into()
+    }
+    .into()
 }
 
 #[derive(Clone)]

@@ -135,18 +135,22 @@ enum Command {
     Test,
 }
 
-#[derive(Debug, Clone, Copy, Encode, Decode)]
+#[derive(Debug, Clone, Copy, Encode, Decode, Default)]
 enum CommandState {
+    #[default]
     Idle,
-    CommandQueued { command: Command, cycles: u32 },
-    ReceivingCommand { command: Command, cycles_remaining: u32 },
-    GeneratingSecondResponse { command: Command, cycles_remaining: u32 },
-}
-
-impl Default for CommandState {
-    fn default() -> Self {
-        Self::Idle
-    }
+    CommandQueued {
+        command: Command,
+        cycles: u32,
+    },
+    ReceivingCommand {
+        command: Command,
+        cycles_remaining: u32,
+    },
+    GeneratingSecondResponse {
+        command: Command,
+        cycles_remaining: u32,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Encode, Decode)]
@@ -162,22 +166,33 @@ enum SpinUpNextState {
     Seek(CdTime, SeekNextState),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Encode, Decode)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Encode, Decode, Default)]
 enum DriveState {
+    #[default]
     Stopped,
-    SpinningUp { cycles_remaining: u32, next: SpinUpNextState },
-    Seeking { destination: CdTime, cycles_remaining: u32, next: SeekNextState },
-    PreparingToRead { time: CdTime, cycles_remaining: u32 },
+    SpinningUp {
+        cycles_remaining: u32,
+        next: SpinUpNextState,
+    },
+    Seeking {
+        destination: CdTime,
+        cycles_remaining: u32,
+        next: SeekNextState,
+    },
+    PreparingToRead {
+        time: CdTime,
+        cycles_remaining: u32,
+    },
     Reading(ReadState),
-    PreparingToPlay { time: CdTime, cycles_remaining: u32 },
+    PreparingToPlay {
+        time: CdTime,
+        cycles_remaining: u32,
+    },
     Playing(PlayState),
-    Paused { time: CdTime, int2_queued: bool },
-}
-
-impl Default for DriveState {
-    fn default() -> Self {
-        Self::Stopped
-    }
+    Paused {
+        time: CdTime,
+        int2_queued: bool,
+    },
 }
 
 impl DriveState {
@@ -656,6 +671,7 @@ impl CdController {
         log::debug!("  Parameter FIFO write (idx {}): {value:02X}", self.parameter_fifo.len() - 1);
     }
 
+    #[allow(clippy::unused_self)]
     fn write_request_register(&mut self, value: u8) {
         if value.bit(5) {
             todo!("SMEN bit set in request register (command start interrupt)");

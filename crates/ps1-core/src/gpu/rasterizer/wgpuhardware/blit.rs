@@ -150,10 +150,10 @@ impl CpuVramBlitPipeline {
         compute_pass.set_bind_group(1, bind_group_1, &[]);
         compute_pass.set_push_constants(0, bytemuck::cast_slice(&[shader_args]));
 
-        let x_groups =
-            args.width / Self::WORKGROUP_SIZE + u32::from(args.width % Self::WORKGROUP_SIZE != 0);
-        let y_groups =
-            args.height / Self::WORKGROUP_SIZE + u32::from(args.height % Self::WORKGROUP_SIZE != 0);
+        let x_groups = args.width / Self::WORKGROUP_SIZE
+            + u32::from(!args.width.is_multiple_of(Self::WORKGROUP_SIZE));
+        let y_groups = args.height / Self::WORKGROUP_SIZE
+            + u32::from(!args.height.is_multiple_of(Self::WORKGROUP_SIZE));
         compute_pass.dispatch_workgroups(x_groups, y_groups, 1);
     }
 }
@@ -324,10 +324,8 @@ impl VramCopyPipeline {
         compute_pass.set_push_constants(0, bytemuck::cast_slice(&[vram_copy_args]));
         compute_pass.set_bind_group(0, &self.bind_group, &[]);
 
-        let x_workgroups =
-            (resolution_scale * args.width + Self::WORKGROUP_SIZE - 1) / Self::WORKGROUP_SIZE;
-        let y_workgroups =
-            (resolution_scale * args.height + Self::WORKGROUP_SIZE - 1) / Self::WORKGROUP_SIZE;
+        let x_workgroups = (resolution_scale * args.width).div_ceil(Self::WORKGROUP_SIZE);
+        let y_workgroups = (resolution_scale * args.height).div_ceil(Self::WORKGROUP_SIZE);
         compute_pass.dispatch_workgroups(x_workgroups, y_workgroups, 1);
     }
 }
@@ -418,9 +416,9 @@ impl VramFillPipeline {
         compute_pass.set_push_constants(0, bytemuck::cast_slice(&[args]));
 
         let x_workgroups =
-            width / Self::WORKGROUP_SIZE + u32::from(width % Self::WORKGROUP_SIZE != 0);
+            width / Self::WORKGROUP_SIZE + u32::from(!width.is_multiple_of(Self::WORKGROUP_SIZE));
         let y_workgroups =
-            height / Self::WORKGROUP_SIZE + u32::from(height % Self::WORKGROUP_SIZE != 0);
+            height / Self::WORKGROUP_SIZE + u32::from(!height.is_multiple_of(Self::WORKGROUP_SIZE));
         compute_pass.dispatch_workgroups(x_workgroups, y_workgroups, 1);
     }
 }

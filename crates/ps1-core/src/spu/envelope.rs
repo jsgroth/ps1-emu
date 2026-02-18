@@ -121,16 +121,11 @@ impl EnvelopeSettings {
     }
 }
 
-#[derive(Debug, Clone, Copy, Encode, Decode)]
+#[derive(Debug, Clone, Copy, Encode, Decode, Default)]
 pub enum SweepSetting {
+    #[default]
     Fixed,
     Sweep(EnvelopeSettings),
-}
-
-impl Default for SweepSetting {
-    fn default() -> Self {
-        Self::Fixed
-    }
 }
 
 impl SweepSetting {

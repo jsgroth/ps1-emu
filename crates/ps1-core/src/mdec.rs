@@ -498,8 +498,10 @@ fn idct_core(block: &mut [i32; 64], buffer: &mut [i32; 64], scale_table: &[i16; 
 fn yuv_to_rgb(base_col: usize, base_row: usize, signed: bool, buffers: &mut Buffers) {
     for row in 0..8 {
         for col in 0..8 {
-            let mut r = buffers.cr_block[8 * ((base_row + row) / 2) + (base_col + col) / 2];
-            let mut b = buffers.cb_block[8 * ((base_row + row) / 2) + (base_col + col) / 2];
+            let mut r = buffers.cr_block
+                [8 * usize::midpoint(base_row, row) + usize::midpoint(base_col, col)];
+            let mut b = buffers.cb_block
+                [8 * usize::midpoint(base_row, row) + usize::midpoint(base_col, col)];
 
             let g = (-0.3437 * f64::from(b) - 0.7143 * f64::from(r)).round() as i32;
             r = (1.402 * f64::from(r)).round() as i32;

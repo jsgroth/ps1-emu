@@ -92,13 +92,12 @@ fn run_headless(
 
     #[allow(deprecated)]
     event_loop.run(move |event, elwt| {
-        if let Some(first_event) = first_event.take() {
-            if let Err(err) = emu_state.handle_event(&first_event, elwt, &event_loop_proxy, config)
-            {
-                log::error!("Error initializing emulator: {err}");
-                elwt.exit();
-                return;
-            }
+        if let Some(first_event) = first_event.take()
+            && let Err(err) = emu_state.handle_event(&first_event, elwt, &event_loop_proxy, config)
+        {
+            log::error!("Error initializing emulator: {err}");
+            elwt.exit();
+            return;
         }
 
         if sigint.load(Ordering::Relaxed) {

@@ -681,7 +681,7 @@ impl App {
                     self.state.audio_device_queue_size.add_ui(
                         ui,
                         &mut self.config.audio.device_queue_size,
-                        |value| value >= 8 && value.count_ones() == 1,
+                        |value| value >= 8 && value.is_power_of_two(),
                     );
 
                     ui.label("Audio device queue size (samples)");
@@ -1010,7 +1010,7 @@ impl<'a> MemoryCardModeWidget<'a> {
     }
 }
 
-impl<'a> Widget for MemoryCardModeWidget<'a> {
+impl Widget for MemoryCardModeWidget<'_> {
     fn ui(self, ui: &mut Ui) -> Response {
         ui.group(|ui| {
             ui.label(self.label);

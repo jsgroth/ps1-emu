@@ -9,18 +9,6 @@ use std::time::Duration;
 use wgpu::PipelineCompilationOptions;
 use winit::dpi::PhysicalSize;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-struct FrameSize {
-    width: u32,
-    height: u32,
-}
-
-impl From<&wgpu::Texture> for FrameSize {
-    fn from(value: &wgpu::Texture) -> Self {
-        Self { width: value.width(), height: value.height() }
-    }
-}
-
 pub struct SwapChainRenderer {
     device: Arc<wgpu::Device>,
     queue: Arc<wgpu::Queue>,

@@ -106,14 +106,14 @@ impl SoftwareRenderer {
             );
         }
 
-        return self.write_frame(
+        self.write_frame(
             &wgpu_resources.device,
             &wgpu_resources.queue,
             frame_size,
             frame_coords,
             registers.display_area_color_depth,
             vram,
-        );
+        )
     }
 
     fn clear_frame(
@@ -250,7 +250,7 @@ fn populate_frame_buffer(
                     let first_halfword = vram[vram_row_addr | (vram_x & 0x3FF) as usize];
                     let second_halfword = vram[vram_row_addr | ((vram_x + 1) & 0x3FF) as usize];
 
-                    let color = if effective_x % 2 == 0 {
+                    let color = if effective_x.is_multiple_of(2) {
                         RgbaColor::rgb(
                             first_halfword as u8,
                             (first_halfword >> 8) as u8,

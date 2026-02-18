@@ -1047,10 +1047,11 @@ impl RasterizerInterface for WgpuRasterizer {
             self.hazard_tracker.mark_rendered(bounding_box_top_left, bounding_box_top_right);
         }
 
-        if self.config.resolution_scale != 1 && args.pgxp_vertices.is_none() {
-            if let Some(command) = check_for_tiny_triangle(&args, draw_settings) {
-                self.draw_commands.push(command);
-            }
+        if self.config.resolution_scale != 1
+            && args.pgxp_vertices.is_none()
+            && let Some(command) = check_for_tiny_triangle(&args, draw_settings)
+        {
+            self.draw_commands.push(command);
         }
 
         self.draw_commands

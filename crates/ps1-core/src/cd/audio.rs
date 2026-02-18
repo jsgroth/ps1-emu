@@ -130,7 +130,7 @@ impl CdController {
                     DriveState::Paused { time: time - CdTime::new(0, 0, 1), int2_queued: false };
             } else {
                 self.drive_state = DriveState::Stopped;
-            };
+            }
 
             self.int4(&[stat!(self)]);
             return Ok(self.drive_state);
