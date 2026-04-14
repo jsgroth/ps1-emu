@@ -1,12 +1,12 @@
 use crate::config::{AspectRatio, VideoConfig};
 use crate::emuthread::{EmulatorSwapChain, QueuedFrame};
 use crate::{Never, emuthread};
+use anyhow::anyhow;
 use ps1_core::api::Renderer;
-use std::iter;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
-use wgpu::PipelineCompilationOptions;
+use std::{iter, thread};
 use winit::dpi::PhysicalSize;
 
 pub struct SwapChainRenderer {
@@ -51,8 +51,10 @@ impl Renderer for SwapChainRenderer {
             while self.in_progress_renders.load(Ordering::Relaxed)
                 >= emuthread::SWAP_CHAIN_LEN as u32
             {
-                self.device.poll(wgpu::Maintain::Poll);
-                emuthread::sleep(Duration::from_micros(250));
+                let _ = self
+                    .device
+                    .poll(wgpu::PollType::Wait { submission_index: None, timeout: None });
+                thread::sleep(Duration::from_micros(250));
             }
 
             self.queue.submit(command_buffers);
@@ -66,6 +68,7 @@ impl Renderer for SwapChainRenderer {
         let queued_frame = QueuedFrame {
             view: frame.create_view(&wgpu::TextureViewDescriptor {
                 format: Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+                usage: Some(wgpu::TextureUsages::TEXTURE_BINDING),
                 ..wgpu::TextureViewDescriptor::default()
             }),
             size: frame.size(),
@@ -81,12 +84,21 @@ impl Renderer for SwapChainRenderer {
         } else {
             self.swap_chain.rendered_frames.lock().unwrap().push_back(queued_frame);
 
-            self.device.poll(wgpu::Maintain::WaitForSubmissionIndex(submission));
+            self.device
+                .poll(wgpu::PollType::Wait { submission_index: Some(submission), timeout: None })
+                .expect("Invalid poll");
             self.in_progress_renders.fetch_sub(1, Ordering::Relaxed);
         }
 
         Ok(())
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum SurfaceRenderEffect {
+    None,
+    FrameRendered { suboptimal: bool },
+    SurfaceOutdated,
 }
 
 pub struct SurfaceRenderer {
@@ -141,8 +153,8 @@ impl SurfaceRenderer {
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: "render_pipeline_layout".into(),
-            bind_group_layouts: &[&sampler_bind_group_layout, &frame_bind_group_layout],
-            push_constant_ranges: &[],
+            bind_group_layouts: &[Some(&sampler_bind_group_layout), Some(&frame_bind_group_layout)],
+            immediate_size: 0,
         });
 
         let shader = device.create_shader_module(wgpu::include_wgsl!("render.wgsl"));
@@ -151,8 +163,8 @@ impl SurfaceRenderer {
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
-                entry_point: "vs_main",
-                compilation_options: PipelineCompilationOptions::default(),
+                entry_point: Some("vs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
                 buffers: &[],
             },
             primitive: wgpu::PrimitiveState {
@@ -168,15 +180,15 @@ impl SurfaceRenderer {
             multisample: wgpu::MultisampleState::default(),
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
-                entry_point: "fs_main",
-                compilation_options: PipelineCompilationOptions::default(),
+                entry_point: Some("fs_main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: surface_config.format,
                     blend: None,
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
             }),
-            multiview: None,
+            multiview_mask: None,
             cache: None,
         });
 
@@ -211,12 +223,38 @@ impl SurfaceRenderer {
         self.surface_size.height = size.height;
     }
 
-    pub fn render_frame_if_available(&mut self, surface: &wgpu::Surface<'_>) -> anyhow::Result<()> {
+    pub fn render_frame_if_available(
+        &mut self,
+        surface: &wgpu::Surface<'_>,
+    ) -> anyhow::Result<SurfaceRenderEffect> {
         let Some(frame) = self.swap_chain.rendered_frames.lock().unwrap().pop_front() else {
-            return Ok(());
+            return Ok(SurfaceRenderEffect::None);
         };
 
-        let output = surface.get_current_texture()?;
+        let mut suboptimal = false;
+        let output = match surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(texture) => texture,
+            wgpu::CurrentSurfaceTexture::Suboptimal(texture) => {
+                log::warn!("wgpu surface is suboptimal; will reconfigure for next frame");
+                suboptimal = true;
+                texture
+            }
+            wgpu::CurrentSurfaceTexture::Timeout => {
+                return Err(anyhow!("wgpu surface timeout error"));
+            }
+            wgpu::CurrentSurfaceTexture::Occluded => {
+                return Ok(SurfaceRenderEffect::None);
+            }
+            wgpu::CurrentSurfaceTexture::Outdated => {
+                return Ok(SurfaceRenderEffect::SurfaceOutdated);
+            }
+            wgpu::CurrentSurfaceTexture::Lost => {
+                return Err(anyhow!("wgpu surface lost error"));
+            }
+            wgpu::CurrentSurfaceTexture::Validation => {
+                return Err(anyhow!("wgpu surface validation error"));
+            }
+        };
         let output_view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         let frame_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -239,6 +277,7 @@ impl SurfaceRenderer {
                 label: "surface_render_pass".into(),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &output_view,
+                    depth_slice: None,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
@@ -269,7 +308,7 @@ impl SurfaceRenderer {
         self.queue.submit(iter::once(encoder.finish()));
         output.present();
 
-        Ok(())
+        Ok(SurfaceRenderEffect::FrameRendered { suboptimal })
     }
 }
 
@@ -282,7 +321,6 @@ fn create_sampler_bind_group(
         label: "frame_sampler".into(),
         mag_filter: filter_mode,
         min_filter: filter_mode,
-        mipmap_filter: filter_mode,
         ..wgpu::SamplerDescriptor::default()
     });
 

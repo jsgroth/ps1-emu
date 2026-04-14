@@ -1,6 +1,5 @@
 use crate::gpu::Vertex;
 use bytemuck::{Pod, Zeroable};
-use std::mem;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
     BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindGroupLayoutDescriptor,
@@ -23,7 +22,7 @@ impl VramSyncVertex {
     const ATTRIBUTES: [VertexAttribute; 1] = wgpu::vertex_attr_array![0 => Sint32x2];
 
     const LAYOUT: VertexBufferLayout<'static> = VertexBufferLayout {
-        array_stride: mem::size_of::<Self>() as u64,
+        array_stride: size_of::<Self>() as u64,
         step_mode: VertexStepMode::Vertex,
         attributes: &Self::ATTRIBUTES,
     };
@@ -90,8 +89,8 @@ impl NativeScaledSyncPipeline {
 
         let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: "native_scaled_sync_pipeline_layout".into(),
-            bind_group_layouts: &[&bind_group_layout],
-            push_constant_ranges: &[],
+            bind_group_layouts: &[Some(&bind_group_layout)],
+            immediate_size: 0,
         });
 
         let shader = device.create_shader_module(wgpu::include_wgsl!("scaledsync.wgsl"));
@@ -100,7 +99,7 @@ impl NativeScaledSyncPipeline {
             layout: Some(&pipeline_layout),
             vertex: VertexState {
                 module: &shader,
-                entry_point: "vs_main",
+                entry_point: Some("vs_main"),
                 compilation_options: PipelineCompilationOptions::default(),
                 buffers: &[VramSyncVertex::LAYOUT],
             },
@@ -117,7 +116,7 @@ impl NativeScaledSyncPipeline {
             multisample: MultisampleState::default(),
             fragment: Some(FragmentState {
                 module: &shader,
-                entry_point: "native_to_scaled",
+                entry_point: Some("native_to_scaled"),
                 compilation_options: PipelineCompilationOptions::default(),
                 targets: &[Some(ColorTargetState {
                     format: TextureFormat::Rgba8Unorm,
@@ -125,7 +124,7 @@ impl NativeScaledSyncPipeline {
                     write_mask: ColorWrites::ALL,
                 })],
             }),
-            multiview: None,
+            multiview_mask: None,
             cache: None,
         });
 
@@ -216,7 +215,6 @@ impl ScaledNativeSyncPipeline {
             label: "scaled_native_sync_sampler".into(),
             mag_filter: FilterMode::Linear,
             min_filter: FilterMode::Linear,
-            mipmap_filter: FilterMode::Linear,
             ..SamplerDescriptor::default()
         });
 
@@ -258,8 +256,8 @@ impl ScaledNativeSyncPipeline {
 
         let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: "scaled_native_sync_pipeline_layout".into(),
-            bind_group_layouts: &[&bind_group_layout_0, &bind_group_layout_1],
-            push_constant_ranges: &[],
+            bind_group_layouts: &[Some(&bind_group_layout_0), Some(&bind_group_layout_1)],
+            immediate_size: 0,
         });
 
         let shader = device.create_shader_module(wgpu::include_wgsl!("nativesync.wgsl"));
@@ -268,7 +266,7 @@ impl ScaledNativeSyncPipeline {
             layout: Some(&pipeline_layout),
             vertex: VertexState {
                 module: &shader,
-                entry_point: "vs_main",
+                entry_point: Some("vs_main"),
                 compilation_options: PipelineCompilationOptions::default(),
                 buffers: &[VramSyncVertex::LAYOUT],
             },
@@ -285,7 +283,7 @@ impl ScaledNativeSyncPipeline {
             multisample: MultisampleState::default(),
             fragment: Some(FragmentState {
                 module: &shader,
-                entry_point: "fs_main",
+                entry_point: Some("fs_main"),
                 compilation_options: PipelineCompilationOptions::default(),
                 targets: &[Some(ColorTargetState {
                     format: TextureFormat::R32Uint,
@@ -293,7 +291,7 @@ impl ScaledNativeSyncPipeline {
                     write_mask: ColorWrites::ALL,
                 })],
             }),
-            multiview: None,
+            multiview_mask: None,
             cache: None,
         });
 

@@ -1,4 +1,4 @@
-var<private> VERTICES: array<vec4f, 4> = array<vec4f, 4>(
+const VERTICES: array<vec4f, 4> = array<vec4f, 4>(
     vec4f(-1.0, -1.0, 0.0, 1.0),
     vec4f(1.0, -1.0, 0.0, 1.0),
     vec4f(-1.0, 1.0, 0.0, 1.0),
@@ -20,7 +20,7 @@ struct Render24bppArgs {
     display_end: vec2u,
 }
 
-var<push_constant> args: Render24bppArgs;
+var<immediate> args: Render24bppArgs;
 
 @fragment
 fn fs_main(@builtin(position) in_position: vec4f) -> @location(0) vec4f {

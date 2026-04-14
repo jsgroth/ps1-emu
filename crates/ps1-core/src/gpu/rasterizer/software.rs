@@ -152,7 +152,7 @@ impl SoftwareRenderer {
         queue.write_texture(
             frame_texture.as_image_copy(),
             bytemuck::cast_slice(self.frame_buffer.as_ref()),
-            wgpu::ImageDataLayout {
+            wgpu::TexelCopyBufferLayout {
                 offset: 0,
                 bytes_per_row: Some(1024 * 4),
                 rows_per_image: None,

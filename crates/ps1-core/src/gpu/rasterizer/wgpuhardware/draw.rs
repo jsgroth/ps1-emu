@@ -8,17 +8,17 @@ use crate::gpu::rasterizer::{
 };
 use crate::gpu::{Color, Vertex};
 use bytemuck::{Pod, Zeroable};
-use std::{array, mem};
+use std::array;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
     BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor,
     BindGroupLayoutEntry, BindingResource, BindingType, BlendComponent, BlendFactor,
     BlendOperation, BlendState, Buffer, BufferUsages, ColorTargetState, ColorWrites, Device,
     FragmentState, FrontFace, IndexFormat, MultisampleState, PipelineCompilationOptions,
-    PipelineLayoutDescriptor, PolygonMode, PrimitiveState, PrimitiveTopology, PushConstantRange,
-    RenderPass, RenderPipeline, RenderPipelineDescriptor, ShaderModule, ShaderStages,
-    StorageTextureAccess, Texture, TextureFormat, TextureViewDescriptor, TextureViewDimension,
-    VertexAttribute, VertexBufferLayout, VertexState, VertexStepMode,
+    PipelineLayoutDescriptor, PolygonMode, PrimitiveState, PrimitiveTopology, RenderPass,
+    RenderPipeline, RenderPipelineDescriptor, ShaderModule, ShaderStages, StorageTextureAccess,
+    Texture, TextureFormat, TextureViewDescriptor, TextureViewDimension, VertexAttribute,
+    VertexBufferLayout, VertexState, VertexStepMode,
 };
 
 #[repr(C)]
@@ -61,7 +61,7 @@ impl UntexturedVertex {
         wgpu::vertex_attr_array![0 => Float32x3, 1 => Uint32x3, 2 => Uint32];
 
     const LAYOUT: VertexBufferLayout<'static> = VertexBufferLayout {
-        array_stride: mem::size_of::<Self>() as u64,
+        array_stride: size_of::<Self>() as u64,
         step_mode: VertexStepMode::Vertex,
         attributes: &Self::ATTRIBUTES,
     };
@@ -123,7 +123,7 @@ impl TexturedVertex {
     ];
 
     const LAYOUT: VertexBufferLayout<'static> = VertexBufferLayout {
-        array_stride: mem::size_of::<Self>() as u64,
+        array_stride: size_of::<Self>() as u64,
         step_mode: VertexStepMode::Vertex,
         attributes: &Self::ATTRIBUTES,
     };
@@ -209,7 +209,7 @@ impl TexturedRectVertex {
     ];
 
     const LAYOUT: VertexBufferLayout<'static> = VertexBufferLayout {
-        array_stride: mem::size_of::<Self>() as u64,
+        array_stride: size_of::<Self>() as u64,
         step_mode: VertexStepMode::Vertex,
         attributes: &Self::ATTRIBUTES,
     };
@@ -396,10 +396,7 @@ impl DrawPipelines {
         let untextured_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: "untextured_opaque_triangle_pipeline_layout".into(),
             bind_group_layouts: &[],
-            push_constant_ranges: &[PushConstantRange {
-                stages: ShaderStages::FRAGMENT,
-                range: 0..mem::size_of::<ShaderDrawSettings>() as u32,
-            }],
+            immediate_size: size_of::<ShaderDrawSettings>() as u32,
         });
 
         let new_untextured_triangle_pipeline = |fs_entry_point: &str, blend: Option<BlendState>| {
@@ -408,7 +405,7 @@ impl DrawPipelines {
                 layout: Some(&untextured_layout),
                 vertex: VertexState {
                     module: draw_shader,
-                    entry_point: "vs_untextured",
+                    entry_point: Some("vs_untextured"),
                     compilation_options: PipelineCompilationOptions::default(),
                     buffers: &[UntexturedVertex::LAYOUT],
                 },
@@ -425,7 +422,7 @@ impl DrawPipelines {
                 multisample: MultisampleState::default(),
                 fragment: Some(FragmentState {
                     module: draw_shader,
-                    entry_point: fs_entry_point,
+                    entry_point: Some(fs_entry_point),
                     compilation_options: PipelineCompilationOptions::default(),
                     targets: &[Some(ColorTargetState {
                         format: TextureFormat::Rgba8Unorm,
@@ -433,7 +430,7 @@ impl DrawPipelines {
                         write_mask: ColorWrites::ALL,
                     })],
                 }),
-                multiview: None,
+                multiview_mask: None,
                 cache: None,
             })
         };
@@ -523,11 +520,8 @@ impl DrawPipelines {
 
         let textured_pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: "textured_opaque_triangle_pipeline_layout".into(),
-            bind_group_layouts: &[&textured_bind_group_layout],
-            push_constant_ranges: &[PushConstantRange {
-                stages: ShaderStages::FRAGMENT,
-                range: 0..mem::size_of::<ShaderDrawSettings>() as u32,
-            }],
+            bind_group_layouts: &[Some(&textured_bind_group_layout)],
+            immediate_size: size_of::<ShaderDrawSettings>() as u32,
         });
 
         let new_textured_pipeline =
@@ -540,7 +534,7 @@ impl DrawPipelines {
                     layout: Some(&textured_pipeline_layout),
                     vertex: VertexState {
                         module: draw_shader,
-                        entry_point: vs_entry_point,
+                        entry_point: Some(vs_entry_point),
                         compilation_options: PipelineCompilationOptions::default(),
                         buffers: &[vertex_buffer_layout],
                     },
@@ -557,7 +551,7 @@ impl DrawPipelines {
                     multisample: MultisampleState::default(),
                     fragment: Some(FragmentState {
                         module: draw_shader,
-                        entry_point: fs_entry_point,
+                        entry_point: Some(fs_entry_point),
                         compilation_options: PipelineCompilationOptions::default(),
                         targets: &[Some(ColorTargetState {
                             format: TextureFormat::Rgba8Unorm,
@@ -565,7 +559,7 @@ impl DrawPipelines {
                             write_mask: ColorWrites::ALL,
                         })],
                     }),
-                    multiview: None,
+                    multiview_mask: None,
                     cache: None,
                 })
             };
@@ -786,33 +780,21 @@ impl DrawPipelines {
                     };
 
                     render_pass.set_pipeline(pipeline);
-                    render_pass.set_push_constants(
-                        ShaderStages::FRAGMENT,
-                        0,
-                        bytemuck::cast_slice(&[draw_settings]),
-                    );
+                    render_pass.set_immediates(0, bytemuck::cast_slice(&[draw_settings]));
                     render_pass.set_vertex_buffer(0, buffers.untextured_triangle.slice(..));
 
                     render_pass.draw(batch.start..batch.end, 0..1);
                 }
                 DrawPipeline::TexturedTriangle(Some(SemiTransparencyMode::Subtract)) => {
                     render_pass.set_pipeline(&self.textured_subtract_pipeline_opaque);
-                    render_pass.set_push_constants(
-                        ShaderStages::FRAGMENT,
-                        0,
-                        bytemuck::cast_slice(&[draw_settings]),
-                    );
+                    render_pass.set_immediates(0, bytemuck::cast_slice(&[draw_settings]));
                     render_pass.set_bind_group(0, &self.textured_bind_group, &[]);
                     render_pass.set_vertex_buffer(0, buffers.textured_triangle.slice(..));
 
                     render_pass.draw(batch.start..batch.end, 0..1);
 
                     render_pass.set_pipeline(&self.textured_subtract_pipeline_transparent);
-                    render_pass.set_push_constants(
-                        ShaderStages::FRAGMENT,
-                        0,
-                        bytemuck::cast_slice(&[draw_settings]),
-                    );
+                    render_pass.set_immediates(0, bytemuck::cast_slice(&[draw_settings]));
 
                     render_pass.draw(batch.start..batch.end, 0..1);
                 }
@@ -834,11 +816,7 @@ impl DrawPipelines {
                     };
 
                     render_pass.set_pipeline(pipeline);
-                    render_pass.set_push_constants(
-                        ShaderStages::FRAGMENT,
-                        0,
-                        bytemuck::cast_slice(&[draw_settings]),
-                    );
+                    render_pass.set_immediates(0, bytemuck::cast_slice(&[draw_settings]));
                     render_pass.set_bind_group(0, &self.textured_bind_group, &[]);
                     render_pass.set_vertex_buffer(0, buffers.textured_triangle.slice(..));
 
@@ -846,11 +824,7 @@ impl DrawPipelines {
                 }
                 DrawPipeline::TexturedRectangle(Some(SemiTransparencyMode::Subtract)) => {
                     render_pass.set_pipeline(&self.textured_subtract_rect_pipeline_opaque);
-                    render_pass.set_push_constants(
-                        ShaderStages::FRAGMENT,
-                        0,
-                        bytemuck::cast_slice(&[draw_settings]),
-                    );
+                    render_pass.set_immediates(0, bytemuck::cast_slice(&[draw_settings]));
                     render_pass.set_bind_group(0, &self.textured_bind_group, &[]);
                     render_pass.set_vertex_buffer(0, buffers.textured_rectangle_vertex.slice(..));
                     render_pass.set_index_buffer(
@@ -863,11 +837,7 @@ impl DrawPipelines {
                     render_pass.draw_indexed(start_indexed..end_indexed, 0, 0..1);
 
                     render_pass.set_pipeline(&self.textured_subtract_rect_pipeline_transparent);
-                    render_pass.set_push_constants(
-                        ShaderStages::FRAGMENT,
-                        0,
-                        bytemuck::cast_slice(&[draw_settings]),
-                    );
+                    render_pass.set_immediates(0, bytemuck::cast_slice(&[draw_settings]));
 
                     render_pass.draw_indexed(start_indexed..end_indexed, 0, 0..1);
                 }
@@ -889,11 +859,7 @@ impl DrawPipelines {
                     };
 
                     render_pass.set_pipeline(pipeline);
-                    render_pass.set_push_constants(
-                        ShaderStages::FRAGMENT,
-                        0,
-                        bytemuck::cast_slice(&[draw_settings]),
-                    );
+                    render_pass.set_immediates(0, bytemuck::cast_slice(&[draw_settings]));
                     render_pass.set_bind_group(0, &self.textured_bind_group, &[]);
                     render_pass.set_vertex_buffer(0, buffers.textured_rectangle_vertex.slice(..));
                     render_pass.set_index_buffer(
@@ -1190,11 +1156,8 @@ impl MaskBitPipelines {
 
         let untextured_pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: "untextured_mask_pipeline_layout".into(),
-            bind_group_layouts: &[&untextured_bind_group_layout],
-            push_constant_ranges: &[PushConstantRange {
-                stages: ShaderStages::FRAGMENT,
-                range: 0..mem::size_of::<ShaderDrawSettings>() as u32,
-            }],
+            bind_group_layouts: &[Some(&untextured_bind_group_layout)],
+            immediate_size: size_of::<ShaderDrawSettings>() as u32,
         });
 
         let mask_shader =
@@ -1206,7 +1169,7 @@ impl MaskBitPipelines {
                 layout: Some(&untextured_pipeline_layout),
                 vertex: VertexState {
                     module: draw_shader,
-                    entry_point: "vs_untextured",
+                    entry_point: Some("vs_untextured"),
                     compilation_options: PipelineCompilationOptions::default(),
                     buffers: &[UntexturedVertex::LAYOUT],
                 },
@@ -1223,7 +1186,7 @@ impl MaskBitPipelines {
                 multisample: MultisampleState::default(),
                 fragment: Some(FragmentState {
                     module: &mask_shader,
-                    entry_point: "fs_untextured_average",
+                    entry_point: Some("fs_untextured_average"),
                     compilation_options: PipelineCompilationOptions::default(),
                     targets: &[Some(ColorTargetState {
                         format: TextureFormat::Rgba8Unorm,
@@ -1231,7 +1194,7 @@ impl MaskBitPipelines {
                         write_mask: ColorWrites::empty(),
                     })],
                 }),
-                multiview: None,
+                multiview_mask: None,
                 cache: None,
             });
 
@@ -1293,11 +1256,8 @@ impl MaskBitPipelines {
 
         let textured_pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: "textured_mask_pipeline_layout".into(),
-            bind_group_layouts: &[&textured_bind_group_layout],
-            push_constant_ranges: &[PushConstantRange {
-                stages: ShaderStages::FRAGMENT,
-                range: 0..mem::size_of::<ShaderDrawSettings>() as u32,
-            }],
+            bind_group_layouts: &[Some(&textured_bind_group_layout)],
+            immediate_size: size_of::<ShaderDrawSettings>() as u32,
         });
 
         let new_textured_pipeline = |vertex_buffer_layout: VertexBufferLayout<'_>,
@@ -1308,7 +1268,7 @@ impl MaskBitPipelines {
                 layout: Some(&textured_pipeline_layout),
                 vertex: VertexState {
                     module: draw_shader,
-                    entry_point: vs_entry_point,
+                    entry_point: Some(vs_entry_point),
                     compilation_options: PipelineCompilationOptions::default(),
                     buffers: &[vertex_buffer_layout],
                 },
@@ -1325,7 +1285,7 @@ impl MaskBitPipelines {
                 multisample: MultisampleState::default(),
                 fragment: Some(FragmentState {
                     module: &mask_shader,
-                    entry_point: fs_entry_point,
+                    entry_point: Some(fs_entry_point),
                     compilation_options: PipelineCompilationOptions::default(),
                     targets: &[Some(ColorTargetState {
                         format: TextureFormat::Rgba8Unorm,
@@ -1333,7 +1293,7 @@ impl MaskBitPipelines {
                         write_mask: ColorWrites::empty(),
                     })],
                 }),
-                multiview: None,
+                multiview_mask: None,
                 cache: None,
             })
         };
@@ -1463,11 +1423,7 @@ impl MaskBitPipelines {
                 DrawPipeline::UntexturedTriangle(Some(SemiTransparencyMode::Average)) => {
                     render_pass.set_pipeline(&self.untextured_average_pipeline);
                     render_pass.set_bind_group(0, &self.untextured_bind_group, &[]);
-                    render_pass.set_push_constants(
-                        ShaderStages::FRAGMENT,
-                        0,
-                        bytemuck::cast_slice(&[draw_settings]),
-                    );
+                    render_pass.set_immediates(0, bytemuck::cast_slice(&[draw_settings]));
                     render_pass.set_vertex_buffer(0, buffers.untextured_triangle.slice(..));
 
                     for start in (batch.start..batch.end).step_by(3) {
@@ -1492,11 +1448,7 @@ impl MaskBitPipelines {
 
                     render_pass.set_pipeline(pipeline);
                     render_pass.set_bind_group(0, &self.textured_bind_group, &[]);
-                    render_pass.set_push_constants(
-                        ShaderStages::FRAGMENT,
-                        0,
-                        bytemuck::cast_slice(&[draw_settings]),
-                    );
+                    render_pass.set_immediates(0, bytemuck::cast_slice(&[draw_settings]));
                     render_pass.set_vertex_buffer(0, buffers.textured_triangle.slice(..));
 
                     for start in (batch.start..batch.end).step_by(3) {
@@ -1520,11 +1472,7 @@ impl MaskBitPipelines {
 
                     render_pass.set_pipeline(pipeline);
                     render_pass.set_bind_group(0, &self.textured_bind_group, &[]);
-                    render_pass.set_push_constants(
-                        ShaderStages::FRAGMENT,
-                        0,
-                        bytemuck::cast_slice(&[draw_settings]),
-                    );
+                    render_pass.set_immediates(0, bytemuck::cast_slice(&[draw_settings]));
                     render_pass.set_vertex_buffer(0, buffers.textured_rectangle_vertex.slice(..));
                     render_pass.set_index_buffer(
                         buffers.textured_rectangle_index.slice(..),

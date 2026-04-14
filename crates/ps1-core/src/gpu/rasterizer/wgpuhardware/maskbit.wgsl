@@ -5,7 +5,7 @@ var native_vram: texture_storage_2d<r32uint, read>;
 @group(0) @binding(2)
 var scaled_vram_copy: texture_storage_2d<rgba8unorm, read>;
 
-var<push_constant> draw_settings: DrawSettings;
+var<immediate> draw_settings: DrawSettings;
 
 const DUMMY_RETURN: vec4f = vec4f(0.0, 0.0, 0.0, 0.0);
 

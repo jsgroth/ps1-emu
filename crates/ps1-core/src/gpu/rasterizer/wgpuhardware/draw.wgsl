@@ -1,4 +1,4 @@
-var<push_constant> draw_settings: DrawSettings;
+var<immediate> draw_settings: DrawSettings;
 
 @vertex
 fn vs_untextured(input: UntexturedVertex) -> UntexturedVertexOutput {

@@ -415,7 +415,7 @@ impl ClearPipeline {
             layout: None,
             vertex: wgpu::VertexState {
                 module: &clear_module,
-                entry_point: "vs_main",
+                entry_point: Some("vs_main"),
                 compilation_options: PipelineCompilationOptions::default(),
                 buffers: &[],
             },
@@ -432,7 +432,7 @@ impl ClearPipeline {
             multisample: wgpu::MultisampleState::default(),
             fragment: Some(wgpu::FragmentState {
                 module: &clear_module,
-                entry_point: "fs_main",
+                entry_point: Some("fs_main"),
                 compilation_options: PipelineCompilationOptions::default(),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: frame_format,
@@ -440,7 +440,7 @@ impl ClearPipeline {
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
             }),
-            multiview: None,
+            multiview_mask: None,
             cache: None,
         });
 
@@ -454,6 +454,7 @@ impl ClearPipeline {
             label: "clear_render_pass".into(),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: &frame_view,
+                depth_slice: None,
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),

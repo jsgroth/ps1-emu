@@ -2,15 +2,16 @@ use crate::gpu::Color;
 use crate::gpu::rasterizer::wgpuhardware::{VRAM_HEIGHT, VRAM_WIDTH};
 use crate::gpu::rasterizer::{CpuVramBlitArgs, VramVramBlitArgs};
 use bytemuck::{Pod, Zeroable};
-use std::{iter, mem};
+use std::iter;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
 use wgpu::{
     BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindGroupLayoutDescriptor,
     BindGroupLayoutEntry, BindingResource, BindingType, Buffer, BufferBinding, BufferBindingType,
     BufferDescriptor, BufferUsages, CommandBuffer, CommandEncoderDescriptor, ComputePass,
-    ComputePipeline, ComputePipelineDescriptor, Device, ImageCopyBuffer, ImageDataLayout, Maintain,
-    MapMode, PipelineCompilationOptions, PipelineLayoutDescriptor, PushConstantRange, Queue,
-    ShaderStages, StorageTextureAccess, Texture, TextureViewDescriptor, TextureViewDimension,
+    ComputePipeline, ComputePipelineDescriptor, Device, MapMode, PipelineCompilationOptions,
+    PipelineLayoutDescriptor, PollType, Queue, ShaderStages, StorageTextureAccess,
+    TexelCopyBufferInfo, TexelCopyBufferLayout, Texture, TextureViewDescriptor,
+    TextureViewDimension,
 };
 
 // Must match CpuVramBlitArgs in cpuvramblit.wgsl
@@ -76,11 +77,8 @@ impl CpuVramBlitPipeline {
 
         let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: "cpu_vram_blit_pipeline_layout".into(),
-            bind_group_layouts: &[&bind_group_layout_0, &bind_group_layout_1],
-            push_constant_ranges: &[PushConstantRange {
-                stages: ShaderStages::COMPUTE,
-                range: 0..mem::size_of::<ShaderCpuVramBlitArgs>() as u32,
-            }],
+            bind_group_layouts: &[Some(&bind_group_layout_0), Some(&bind_group_layout_1)],
+            immediate_size: size_of::<ShaderCpuVramBlitArgs>() as u32,
         });
 
         let shader = device.create_shader_module(wgpu::include_wgsl!("cpuvramblit.wgsl"));
@@ -88,7 +86,7 @@ impl CpuVramBlitPipeline {
             label: "cpu_vram_blit_pipeline".into(),
             layout: Some(&pipeline_layout),
             module: &shader,
-            entry_point: "cpu_vram_blit",
+            entry_point: Some("cpu_vram_blit"),
             compilation_options: PipelineCompilationOptions::default(),
             cache: None,
         });
@@ -148,7 +146,7 @@ impl CpuVramBlitPipeline {
         compute_pass.set_pipeline(&self.pipeline);
         compute_pass.set_bind_group(0, &self.bind_group_0, &[]);
         compute_pass.set_bind_group(1, bind_group_1, &[]);
-        compute_pass.set_push_constants(0, bytemuck::cast_slice(&[shader_args]));
+        compute_pass.set_immediates(0, bytemuck::cast_slice(&[shader_args]));
 
         let x_groups = args.width / Self::WORKGROUP_SIZE
             + u32::from(!args.width.is_multiple_of(Self::WORKGROUP_SIZE));
@@ -192,9 +190,9 @@ impl VramCpuBlitter {
 
         encoder.copy_texture_to_buffer(
             native_vram.as_image_copy(),
-            ImageCopyBuffer {
+            TexelCopyBufferInfo {
                 buffer: &self.blit_buffer,
-                layout: ImageDataLayout {
+                layout: TexelCopyBufferLayout {
                     offset: 0,
                     bytes_per_row: Some(4 * VRAM_WIDTH),
                     rows_per_image: None,
@@ -203,11 +201,14 @@ impl VramCpuBlitter {
             native_vram.size(),
         );
 
-        queue.submit(draw_command_buffer.into_iter().chain(iter::once(encoder.finish())));
+        let submission =
+            queue.submit(draw_command_buffer.into_iter().chain(iter::once(encoder.finish())));
 
         let blit_buffer_slice = self.blit_buffer.slice(..);
         blit_buffer_slice.map_async(MapMode::Read, Result::unwrap);
-        device.poll(Maintain::Wait);
+        device
+            .poll(PollType::Wait { submission_index: Some(submission), timeout: None })
+            .expect("Invalid poll");
 
         self.ram_buffer.clear();
         {
@@ -292,11 +293,8 @@ impl VramCopyPipeline {
 
         let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: "vram_copy_pipeline_layout".into(),
-            bind_group_layouts: &[&bind_group_layout],
-            push_constant_ranges: &[PushConstantRange {
-                stages: ShaderStages::COMPUTE,
-                range: 0..mem::size_of::<ShaderVramCopyArgs>() as u32,
-            }],
+            bind_group_layouts: &[Some(&bind_group_layout)],
+            immediate_size: size_of::<ShaderVramCopyArgs>() as u32,
         });
 
         let shader = device.create_shader_module(wgpu::include_wgsl!("vramcopy.wgsl"));
@@ -304,7 +302,7 @@ impl VramCopyPipeline {
             label: "vram_copy_pipeline".into(),
             layout: Some(&pipeline_layout),
             module: &shader,
-            entry_point: "vram_copy",
+            entry_point: Some("vram_copy"),
             compilation_options: PipelineCompilationOptions::default(),
             cache: None,
         });
@@ -321,7 +319,7 @@ impl VramCopyPipeline {
         let vram_copy_args = ShaderVramCopyArgs::new(args, resolution_scale);
 
         compute_pass.set_pipeline(&self.pipeline);
-        compute_pass.set_push_constants(0, bytemuck::cast_slice(&[vram_copy_args]));
+        compute_pass.set_immediates(0, bytemuck::cast_slice(&[vram_copy_args]));
         compute_pass.set_bind_group(0, &self.bind_group, &[]);
 
         let x_workgroups = (resolution_scale * args.width).div_ceil(Self::WORKGROUP_SIZE);
@@ -374,11 +372,8 @@ impl VramFillPipeline {
 
         let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: "vram_fill_pipeline_layout".into(),
-            bind_group_layouts: &[&bind_group_layout],
-            push_constant_ranges: &[PushConstantRange {
-                stages: ShaderStages::COMPUTE,
-                range: 0..mem::size_of::<ShaderVramFillArgs>() as u32,
-            }],
+            bind_group_layouts: &[Some(&bind_group_layout)],
+            immediate_size: size_of::<ShaderVramFillArgs>() as u32,
         });
 
         let shader = device.create_shader_module(wgpu::include_wgsl!("vramfill.wgsl"));
@@ -386,7 +381,7 @@ impl VramFillPipeline {
             label: "vram_fill_pipeline".into(),
             layout: Some(&pipeline_layout),
             module: &shader,
-            entry_point: "vram_fill",
+            entry_point: Some("vram_fill"),
             compilation_options: PipelineCompilationOptions::default(),
             cache: None,
         });
@@ -413,7 +408,7 @@ impl VramFillPipeline {
 
         compute_pass.set_pipeline(&self.pipeline);
         compute_pass.set_bind_group(0, &self.bind_group, &[]);
-        compute_pass.set_push_constants(0, bytemuck::cast_slice(&[args]));
+        compute_pass.set_immediates(0, bytemuck::cast_slice(&[args]));
 
         let x_workgroups =
             width / Self::WORKGROUP_SIZE + u32::from(!width.is_multiple_of(Self::WORKGROUP_SIZE));

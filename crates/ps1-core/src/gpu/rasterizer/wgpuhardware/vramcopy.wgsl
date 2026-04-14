@@ -10,7 +10,7 @@ struct VramCopyArgs {
 @group(0) @binding(0)
 var scaled_vram: texture_storage_2d<rgba8unorm, read_write>;
 
-var<push_constant> args: VramCopyArgs;
+var<immediate> args: VramCopyArgs;
 
 @compute
 @workgroup_size(16, 16, 1)

@@ -10,7 +10,7 @@ use crate::emustate::EmulatorState;
 use crate::{OpenFileType, UserEvent, config};
 use egui::{
     Align, Button, CentralPanel, Color32, ComboBox, Context, Grid, Key, KeyboardShortcut, Layout,
-    Modifiers, Response, TextEdit, TopBottomPanel, Ui, Vec2, Widget, Window,
+    Modifiers, Panel, Response, TextEdit, Ui, UiKind, Vec2, Widget, Window,
 };
 use egui_extras::{Column, TableBuilder};
 use ps1_core::api::AdpcmInterpolation;
@@ -42,7 +42,7 @@ impl NumericText {
         config_value: &mut T,
         validator: impl FnOnce(T) -> bool,
     ) {
-        let text_edit = TextEdit::singleline(&mut self.value).desired_width(30.0);
+        let text_edit = TextEdit::singleline(&mut self.value).desired_width(60.0);
         if ui.add(text_edit).changed() {
             match self.value.parse::<T>() {
                 Ok(value) if validator(value) => {
@@ -183,39 +183,39 @@ impl App {
     #[allow(clippy::missing_panics_doc)]
     pub fn render(
         &mut self,
-        ctx: &Context,
+        ui: &mut Ui,
         emu_state: &EmulatorState,
         proxy: &EventLoopProxy<UserEvent>,
     ) {
-        self.render_menu(ctx, emu_state, proxy);
-        self.render_central_panel(ctx, proxy);
+        self.render_menu(ui, emu_state, proxy);
+        self.render_central_panel(ui, proxy);
 
         if self.state.video_window_open {
-            self.render_video_window(ctx);
+            self.render_video_window(ui);
         }
 
         if self.state.graphics_window_open {
-            self.render_graphics_window(ctx);
+            self.render_graphics_window(ui);
         }
 
         if self.state.audio_window_open {
-            self.render_audio_window(ctx);
+            self.render_audio_window(ui);
         }
 
         if self.state.input_window_open {
-            self.render_input_window(ctx);
+            self.render_input_window(ui);
         }
 
         if self.state.paths_window_open {
-            self.render_paths_window(ctx, proxy);
+            self.render_paths_window(ui, proxy);
         }
 
         if self.state.memcards_window_open {
-            self.render_memcards_window(ctx);
+            self.render_memcards_window(ui);
         }
 
         if self.state.debug_window_open {
-            self.render_debug_window(ctx);
+            self.render_debug_window(ui);
         }
 
         if self.config != self.state.last_serialized_config {
@@ -285,12 +285,12 @@ impl App {
 
     fn render_menu(
         &mut self,
-        ctx: &Context,
+        ui: &mut Ui,
         emu_state: &EmulatorState,
         proxy: &EventLoopProxy<UserEvent>,
     ) {
         let open_shortcut = KeyboardShortcut::new(Modifiers::CTRL, Key::O);
-        if ctx.input_mut(|input| input.consume_shortcut(&open_shortcut)) {
+        if ui.input_mut(|input| input.consume_shortcut(&open_shortcut)) {
             proxy
                 .send_event(UserEvent::OpenFileDialog {
                     file_type: OpenFileType::Open,
@@ -300,15 +300,15 @@ impl App {
         }
 
         let quit_shortcut = KeyboardShortcut::new(Modifiers::CTRL, Key::Q);
-        if ctx.input_mut(|input| input.consume_shortcut(&quit_shortcut)) {
+        if ui.input_mut(|input| input.consume_shortcut(&quit_shortcut)) {
             proxy.send_event(UserEvent::Close).unwrap();
         }
 
-        TopBottomPanel::top("menu_panel").show(ctx, |ui| {
-            egui::menu::bar(ui, |ui| {
+        Panel::top("menu_panel").show_inside(ui, |ui| {
+            egui::MenuBar::new().ui(ui, |ui| {
                 ui.menu_button("File", |ui| {
                     let open_button =
-                        Button::new("Open").shortcut_text(ctx.format_shortcut(&open_shortcut));
+                        Button::new("Open").shortcut_text(ui.format_shortcut(&open_shortcut));
                     if ui.add(open_button).clicked() {
                         proxy
                             .send_event(UserEvent::OpenFileDialog {
@@ -316,16 +316,16 @@ impl App {
                                 initial_dir: None,
                             })
                             .unwrap();
-                        ui.close_menu();
+                        ui.close_kind(UiKind::Menu);
                     }
 
                     if ui.button("Run BIOS").clicked() {
                         proxy.send_event(UserEvent::RunBios).unwrap();
-                        ui.close_menu();
+                        ui.close_kind(UiKind::Menu);
                     }
 
                     let quit_button =
-                        Button::new("Quit").shortcut_text(ctx.format_shortcut(&quit_shortcut));
+                        Button::new("Quit").shortcut_text(ui.format_shortcut(&quit_shortcut));
                     if ui.add(quit_button).clicked() {
                         proxy.send_event(UserEvent::Close).unwrap();
                     }
@@ -334,37 +334,37 @@ impl App {
                 ui.menu_button("Settings", |ui| {
                     if ui.button("Video").clicked() {
                         self.state.video_window_open = true;
-                        ui.close_menu();
+                        ui.close_kind(UiKind::Menu);
                     }
 
                     if ui.button("Graphics").clicked() {
                         self.state.graphics_window_open = true;
-                        ui.close_menu();
+                        ui.close_kind(UiKind::Menu);
                     }
 
                     if ui.button("Audio").clicked() {
                         self.state.audio_window_open = true;
-                        ui.close_menu();
+                        ui.close_kind(UiKind::Menu);
                     }
 
                     if ui.button("Input").clicked() {
                         self.state.input_window_open = true;
-                        ui.close_menu();
+                        ui.close_kind(UiKind::Menu);
                     }
 
                     if ui.button("Paths").clicked() {
                         self.state.paths_window_open = true;
-                        ui.close_menu();
+                        ui.close_kind(UiKind::Menu);
                     }
 
                     if ui.button("Memory Cards").clicked() {
                         self.state.memcards_window_open = true;
-                        ui.close_menu();
+                        ui.close_kind(UiKind::Menu);
                     }
 
                     if ui.button("Debug").clicked() {
                         self.state.debug_window_open = true;
-                        ui.close_menu();
+                        ui.close_kind(UiKind::Menu);
                     }
                 });
 
@@ -372,12 +372,12 @@ impl App {
                     ui.add_enabled_ui(emu_state.is_emulator_running(), |ui| {
                         if ui.button("Reset").clicked() {
                             proxy.send_event(UserEvent::Reset).unwrap();
-                            ui.close_menu();
+                            ui.close_kind(UiKind::Menu);
                         }
 
                         if ui.button("Power Off").clicked() {
                             proxy.send_event(UserEvent::PowerOff).unwrap();
-                            ui.close_menu();
+                            ui.close_kind(UiKind::Menu);
                         }
 
                         ui.add_space(10.0);
@@ -388,7 +388,7 @@ impl App {
 
                         if ui.button("Remove Disc").clicked() {
                             proxy.send_event(UserEvent::RemoveDisc).unwrap();
-                            ui.close_menu();
+                            ui.close_kind(UiKind::Menu);
                         }
                     });
                 });
@@ -405,7 +405,7 @@ impl App {
                         Some(change_disc_entry.file.full_path.clone()),
                     ))
                     .unwrap();
-                ui.close_menu();
+                ui.close_kind(UiKind::Menu);
             }
         }
 
@@ -423,7 +423,7 @@ impl App {
                     initial_dir,
                 })
                 .unwrap();
-            ui.close_menu();
+            ui.close_kind(UiKind::Menu);
         }
     }
 
@@ -871,8 +871,8 @@ impl App {
             });
     }
 
-    fn render_central_panel(&mut self, ctx: &Context, proxy: &EventLoopProxy<UserEvent>) {
-        CentralPanel::default().show(ctx, |ui| {
+    fn render_central_panel(&mut self, ui: &mut Ui, proxy: &EventLoopProxy<UserEvent>) {
+        CentralPanel::default().show_inside(ui, |ui| {
             let bios_path_configured = self.config.paths.bios.is_some();
             let search_paths_configured = !self.config.paths.search.is_empty();
 

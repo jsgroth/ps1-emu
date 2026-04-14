@@ -2,9 +2,8 @@ use crate::app::App;
 use crate::config::AppConfig;
 use crate::emustate::EmulatorState;
 use crate::{OpenFileType, UserEvent};
-use anyhow::anyhow;
 use egui::ViewportId;
-use egui_wgpu::ScreenDescriptor;
+use egui_wgpu::{RendererOptions, ScreenDescriptor};
 use rfd::FileDialog;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -31,6 +30,8 @@ pub struct GuiState {
     file_dialog_open: bool,
     // SAFETY: The window must be dropped after the surface
     window: Window,
+    initial_render_complete: bool,
+    window_focused: bool,
 }
 
 impl GuiState {
@@ -40,25 +41,27 @@ impl GuiState {
         let window = event_loop.create_window(
             WindowAttributes::default()
                 .with_title("CoffeePSX")
-                .with_inner_size(LogicalSize::new(800, 600)),
+                .with_inner_size(LogicalSize::new(800, 600))
+                .with_visible(false),
         )?;
 
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
 
         // SAFETY: The surface must not outlive the window
         let surface = unsafe {
-            instance.create_surface_unsafe(wgpu::SurfaceTargetUnsafe::from_window(&window)?)
+            instance.create_surface_unsafe(wgpu::SurfaceTargetUnsafe::from_display_and_window(
+                &window, &window,
+            )?)
         }?;
 
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::HighPerformance,
             force_fallback_adapter: false,
             compatible_surface: Some(&surface),
-        }))
-        .ok_or_else(|| anyhow!("Unable to obtain wgpu adapter"))?;
+        }))?;
 
         let (device, queue) =
-            pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default(), None))?;
+            pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default()))?;
 
         let surface_capabilities = surface.get_capabilities(&adapter);
 
@@ -99,8 +102,16 @@ impl GuiState {
         };
         surface.configure(&device, &surface_config);
 
-        let egui_renderer =
-            egui_wgpu::Renderer::new(&device, surface_config.format, None, 1, false);
+        let egui_renderer = egui_wgpu::Renderer::new(
+            &device,
+            surface_config.format,
+            RendererOptions {
+                msaa_samples: 1,
+                depth_stencil_format: None,
+                dithering: false,
+                predictable_texture_filtering: false,
+            },
+        );
 
         let egui_state = egui_winit::State::new(
             egui::Context::default(),
@@ -139,6 +150,8 @@ impl GuiState {
             egui_callback_next_repaint,
             file_dialog_open: false,
             window,
+            initial_render_complete: false,
+            window_focused: false,
         })
     }
 
@@ -217,6 +230,16 @@ impl GuiState {
                 if egui_callback_repaint_count != 0 && egui_callback_next_repaint <= now {
                     self.egui_callback_repaint_count.fetch_sub(1, Ordering::Relaxed);
                 }
+
+                if !self.initial_render_complete {
+                    self.initial_render_complete = true;
+                    self.window.set_visible(true);
+                }
+
+                if !self.window_focused {
+                    self.window.focus_window();
+                    self.window_focused = self.window.has_focus();
+                }
             }
             Event::UserEvent(UserEvent::OpenFileDialog { file_type, initial_dir }) => {
                 self.file_dialog_open = true;
@@ -241,8 +264,8 @@ impl GuiState {
 
         let egui_input = self.egui_state.take_egui_input(&self.window);
 
-        let full_output = egui_ctx.run(egui_input, |ctx| {
-            self.app.render(ctx, emu_state, proxy);
+        let full_output = egui_ctx.run_ui(egui_input, |ui| {
+            self.app.render(ui, emu_state, proxy);
         });
 
         self.egui_state.handle_platform_output(&self.window, full_output.platform_output);
@@ -251,10 +274,30 @@ impl GuiState {
             self.egui_renderer.update_texture(&self.device, &self.queue, *id, image_delta);
         }
 
+        let mut suboptimal = false;
         let output = match self.surface.get_current_texture() {
-            Ok(output) => output,
-            Err(err) => {
-                log::error!("Error obtaining wgpu surface output: {err}");
+            wgpu::CurrentSurfaceTexture::Success(texture) => texture,
+            wgpu::CurrentSurfaceTexture::Suboptimal(texture) => {
+                suboptimal = true;
+                texture
+            }
+            wgpu::CurrentSurfaceTexture::Outdated => {
+                self.surface.configure(&self.device, &self.surface_config);
+                return;
+            }
+            wgpu::CurrentSurfaceTexture::Timeout => {
+                log::error!("wgpu surface timeout error");
+                return;
+            }
+            wgpu::CurrentSurfaceTexture::Occluded => {
+                return;
+            }
+            wgpu::CurrentSurfaceTexture::Lost => {
+                log::error!("wgpu surface lost error");
+                return;
+            }
+            wgpu::CurrentSurfaceTexture::Validation => {
+                log::error!("wgpu surface validation error");
                 return;
             }
         };
@@ -282,6 +325,7 @@ impl GuiState {
                 label: "egui_rpass".into(),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &output_view,
+                    depth_slice: None,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
@@ -302,6 +346,10 @@ impl GuiState {
 
         for id in &full_output.textures_delta.free {
             self.egui_renderer.free_texture(id);
+        }
+
+        if suboptimal {
+            self.surface.configure(&self.device, &self.surface_config);
         }
     }
 

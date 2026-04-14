@@ -28,9 +28,9 @@ use std::sync::Arc;
 use std::{array, cmp, iter};
 use wgpu::{
     BindGroup, Buffer, BufferDescriptor, BufferUsages, CommandBuffer, CommandEncoder,
-    CommandEncoderDescriptor, ComputePassDescriptor, Device, Extent3d, ImageCopyBuffer,
-    ImageCopyTexture, ImageDataLayout, LoadOp, Maintain, MapMode, Operations, Origin3d, Queue,
-    RenderPassColorAttachment, RenderPassDescriptor, StoreOp, Texture, TextureAspect,
+    CommandEncoderDescriptor, ComputePassDescriptor, Device, Extent3d, LoadOp, MapMode, Operations,
+    Origin3d, PollType, Queue, RenderPassColorAttachment, RenderPassDescriptor, StoreOp,
+    TexelCopyBufferInfo, TexelCopyBufferLayout, TexelCopyTextureInfo, Texture, TextureAspect,
     TextureDescriptor, TextureDimension, TextureFormat, TextureUsages, TextureViewDescriptor,
 };
 
@@ -340,7 +340,7 @@ impl WgpuRasterizer {
         self.queue.write_texture(
             self.native_vram.as_image_copy(),
             bytemuck::cast_slice(&vram_u32),
-            ImageDataLayout {
+            TexelCopyBufferLayout {
                 offset: 0,
                 bytes_per_row: Some(4 * VRAM_WIDTH),
                 rows_per_image: None,
@@ -358,6 +358,7 @@ impl WgpuRasterizer {
                 label: "load_state_render_pass".into(),
                 color_attachments: &[Some(RenderPassColorAttachment {
                     view: &scaled_vram_view,
+                    depth_slice: None,
                     resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Clear(wgpu::Color::BLACK),
@@ -415,6 +416,7 @@ impl WgpuRasterizer {
                 label: "render_24bpp_render_pass".into(),
                 color_attachments: &[Some(RenderPassColorAttachment {
                     view: &frame_view,
+                    depth_slice: None,
                     resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Clear(wgpu::Color::BLACK),
@@ -517,6 +519,7 @@ impl WgpuRasterizer {
                 label: "draw_triangles_render_pass".into(),
                 color_attachments: &[Some(RenderPassColorAttachment {
                     view: &scaled_vram_view,
+                    depth_slice: None,
                     resolve_target: None,
                     ops: Operations { load: LoadOp::Load, store: StoreOp::Store },
                 })],
@@ -560,6 +563,7 @@ impl WgpuRasterizer {
                 label: "draw_triangles_mask_render_pass".into(),
                 color_attachments: &[Some(RenderPassColorAttachment {
                     view: &dummy_vram_view,
+                    depth_slice: None,
                     resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Clear(wgpu::Color::BLACK),
@@ -616,6 +620,7 @@ impl WgpuRasterizer {
                 label: "cpu_vram_blit_render_pass".into(),
                 color_attachments: &[Some(RenderPassColorAttachment {
                     view: &scaled_vram_view,
+                    depth_slice: None,
                     resolve_target: None,
                     ops: Operations { load: LoadOp::Load, store: StoreOp::Store },
                 })],
@@ -689,6 +694,7 @@ impl WgpuRasterizer {
                 label: "scaled_native_sync_render_pass".into(),
                 color_attachments: &[Some(RenderPassColorAttachment {
                     view: &native_vram_view,
+                    depth_slice: None,
                     resolve_target: None,
                     ops: Operations { load: LoadOp::Load, store: StoreOp::Store },
                 })],
@@ -736,13 +742,13 @@ impl WgpuRasterizer {
         let copy_origin = Origin3d { x: scaled_position[0], y: scaled_position[1], z: 0 };
 
         encoder.copy_texture_to_texture(
-            ImageCopyTexture {
+            TexelCopyTextureInfo {
                 texture: &self.scaled_vram,
                 mip_level: 0,
                 origin: copy_origin,
                 aspect: TextureAspect::All,
             },
-            ImageCopyTexture {
+            TexelCopyTextureInfo {
                 texture: &self.scaled_vram_copy,
                 mip_level: 0,
                 origin: copy_origin,
@@ -1213,7 +1219,7 @@ impl RasterizerInterface for WgpuRasterizer {
         let source_x = frame_coords.frame_x + frame_coords.display_x_offset;
         let source_y = frame_coords.frame_y + frame_coords.display_y_offset;
         encoder.copy_texture_to_texture(
-            ImageCopyTexture {
+            TexelCopyTextureInfo {
                 texture: &self.scaled_vram,
                 mip_level: 0,
                 origin: Origin3d {
@@ -1223,7 +1229,7 @@ impl RasterizerInterface for WgpuRasterizer {
                 },
                 aspect: TextureAspect::All,
             },
-            ImageCopyTexture {
+            TexelCopyTextureInfo {
                 texture: frame,
                 mip_level: 0,
                 origin: Origin3d {
@@ -1258,9 +1264,9 @@ impl RasterizerInterface for WgpuRasterizer {
         let mut encoder = self.device.create_command_encoder(&CommandEncoderDescriptor::default());
         encoder.copy_texture_to_buffer(
             self.native_vram.as_image_copy(),
-            ImageCopyBuffer {
+            TexelCopyBufferInfo {
                 buffer: &vram_buffer,
-                layout: ImageDataLayout {
+                layout: TexelCopyBufferLayout {
                     offset: 0,
                     bytes_per_row: Some(4 * VRAM_WIDTH),
                     rows_per_image: None,
@@ -1269,11 +1275,14 @@ impl RasterizerInterface for WgpuRasterizer {
             self.native_vram.size(),
         );
 
-        self.queue.submit(flush_command_buffer.into_iter().chain(iter::once(encoder.finish())));
+        let submission =
+            self.queue.submit(flush_command_buffer.into_iter().chain(iter::once(encoder.finish())));
 
         let vram_buffer_slice = vram_buffer.slice(..);
         vram_buffer_slice.map_async(MapMode::Read, Result::unwrap);
-        self.device.poll(Maintain::Wait);
+        self.device
+            .poll(PollType::Wait { submission_index: Some(submission), timeout: None })
+            .expect("Invalid poll");
 
         let vram_buffer_view = vram_buffer_slice.get_mapped_range();
 

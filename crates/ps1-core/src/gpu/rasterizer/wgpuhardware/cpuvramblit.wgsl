@@ -11,7 +11,7 @@ var native_vram: texture_storage_2d<r32uint, read_write>;
 @group(1) @binding(0)
 var<storage> blit_buffer: array<u32>;
 
-var<push_constant> args: CpuVramBlitArgs;
+var<immediate> args: CpuVramBlitArgs;
 
 @compute
 @workgroup_size(16, 16, 1)

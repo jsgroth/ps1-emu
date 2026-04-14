@@ -25,7 +25,6 @@ sdl2 = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 toml = { workspace = true }
 wgpu = { workspace = true }
-windows = { workspace = true, features = ["Win32_Media"] }
 winit = { workspace = true, features = ["serde"] }
 
 [lints]

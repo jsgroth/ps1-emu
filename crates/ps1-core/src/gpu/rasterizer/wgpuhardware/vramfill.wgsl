@@ -7,7 +7,7 @@ struct VramFillArgs {
 @group(0) @binding(0)
 var native_vram: texture_storage_2d<r32uint, write>;
 
-var<push_constant> args: VramFillArgs;
+var<immediate> args: VramFillArgs;
 
 @compute
 @workgroup_size(16, 16, 1)

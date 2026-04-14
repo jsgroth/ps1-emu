@@ -5,6 +5,8 @@
 //
 //   draw_settings: DrawSettings
 
+enable dual_source_blending;
+
 struct DrawSettings {
     force_mask_bit: u32,
     resolution_scale: u32,
@@ -149,8 +151,8 @@ fn compute_duv(vert0: vec2i, uv0: vec2u, other_positions: vec4i, other_uv: vec4u
 }
 
 struct SemiTransparentOutput {
-    @location(0) color: vec4f,
-    @location(0) @second_blend_source blend: vec4f,
+    @location(0) @blend_src(0) color: vec4f,
+    @location(0) @blend_src(1) blend: vec4f,
 }
 
 fn read_4bpp_texture(uv: vec2u, texpage: vec2u, clut: vec2u) -> u32 {

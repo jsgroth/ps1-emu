@@ -7,12 +7,12 @@ use crate::emuthread::audio::{AudioQueue, QueueAudioCallback, QueueAudioOutput};
 use crate::emuthread::renderer::{SurfaceRenderer, SwapChainRenderer};
 use anyhow::{Context, anyhow};
 use cdrom::reader::{CdRom, CdRomFileFormat};
-use cfg_if::cfg_if;
 use ps1_core::api::{
     LoadedMemoryCards, MemoryCardSlot, Ps1Emulator, Ps1EmulatorBuilder, Ps1EmulatorState,
     SaveWriter, TickEffect, TickError,
 };
 use ps1_core::input::{AnalogJoypadState, DigitalJoypadState, Ps1Inputs};
+pub use renderer::SurfaceRenderEffect;
 use sdl2::audio::AudioDevice;
 use sdl2::{AudioSubsystem, Sdl};
 use std::collections::VecDeque;
@@ -307,7 +307,10 @@ impl EmulationThreadHandle {
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn render_frame_if_available(&mut self, surface: &wgpu::Surface<'_>) -> anyhow::Result<()> {
+    pub fn render_frame_if_available(
+        &mut self,
+        surface: &wgpu::Surface<'_>,
+    ) -> anyhow::Result<SurfaceRenderEffect> {
         self.surface_renderer.render_frame_if_available(surface)
     }
 }
@@ -458,7 +461,7 @@ fn spawn_emu_thread(memory_card_config: &MemoryCardConfig, mut runner: EmulatorR
             }
 
             if !fast_forward {
-                sleep(Duration::from_millis(1));
+                thread::sleep(Duration::from_millis(1));
             }
         }
     });
@@ -591,20 +594,6 @@ fn load_state(emulator: &mut Ps1Emulator, path: &Path) -> anyhow::Result<()> {
     *emulator = Ps1Emulator::from_state(state, emulator.take_unserialized_fields());
 
     Ok(())
-}
-
-fn sleep(duration: Duration) {
-    cfg_if! {
-        if #[cfg(target_os = "windows")] {
-            unsafe {
-                windows::Win32::Media::timeBeginPeriod(1);
-                thread::sleep(duration);
-                windows::Win32::Media::timeEndPeriod(1);
-            }
-        } else {
-            thread::sleep(duration);
-        }
-    }
 }
 
 const SAVE_STATES_DIRECTORY: &str = "states";

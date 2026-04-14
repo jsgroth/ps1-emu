@@ -1,5 +1,5 @@
 use crate::config::{AppConfig, InputConfig, Rasterizer, VSyncMode, VideoConfig};
-use crate::emuthread::{EmulationThreadHandle, EmulatorThreadCommand};
+use crate::emuthread::{EmulationThreadHandle, EmulatorThreadCommand, SurfaceRenderEffect};
 use crate::input::InputMapper;
 use crate::{OpenFileType, UserEvent};
 use anyhow::anyhow;
@@ -28,6 +28,8 @@ struct EmulatorWindow {
     queue: Arc<wgpu::Queue>,
     // SAFETY: The window must be dropped after the surface
     window: Window,
+    initial_render_complete: bool,
+    window_focused: bool,
 }
 
 impl EmulatorWindow {
@@ -42,8 +44,10 @@ impl EmulatorWindow {
         };
         let window_size = LogicalSize::new(config.video.window_width, config.video.window_height);
 
-        let mut window_attrs =
-            WindowAttributes::default().with_title(window_title).with_inner_size(window_size);
+        let mut window_attrs = WindowAttributes::default()
+            .with_title(window_title)
+            .with_inner_size(window_size)
+            .with_visible(false);
         if config.video.launch_in_fullscreen {
             window_attrs = window_attrs.with_fullscreen(Some(Fullscreen::Borderless(None)));
         }
@@ -53,34 +57,39 @@ impl EmulatorWindow {
 
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: config.graphics.wgpu_backend.to_wgpu(),
-            dx12_shader_compiler: wgpu::Dx12Compiler::Dxc {
-                dxil_path: Some("dxil.dll".into()),
-                dxc_path: Some("dxcompiler.dll".into()),
+            backend_options: wgpu::BackendOptions {
+                dx12: wgpu::Dx12BackendOptions {
+                    shader_compiler: wgpu::Dx12Compiler::DynamicDxc {
+                        dxc_path: "dxcompiler.dll".into(),
+                    },
+                    ..wgpu::Dx12BackendOptions::default()
+                },
+                ..wgpu::BackendOptions::default()
             },
-            ..wgpu::InstanceDescriptor::default()
+            ..wgpu::InstanceDescriptor::new_without_display_handle()
         });
 
         // SAFETY: The surface must not outlive the window
         let surface = unsafe {
-            instance.create_surface_unsafe(wgpu::SurfaceTargetUnsafe::from_window(&window)?)
+            instance.create_surface_unsafe(wgpu::SurfaceTargetUnsafe::from_display_and_window(
+                &window, &window,
+            )?)
         }?;
 
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::HighPerformance,
             force_fallback_adapter: false,
             compatible_surface: Some(&surface),
-        }))
-        .ok_or_else(|| anyhow!("Unable to obtain wgpu adapter for emulator window"))?;
+        }))?;
 
-        let (device, queue) = pollster::block_on(adapter.request_device(
-            &wgpu::DeviceDescriptor {
+        let (device, queue) =
+            pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
                 label: "emulator_device".into(),
                 required_features: ps1_core::required_wgpu_features(),
                 required_limits: ps1_core::required_wgpu_limits(),
                 memory_hints: wgpu::MemoryHints::default(),
-            },
-            None,
-        ))?;
+                ..wgpu::DeviceDescriptor::default()
+            }))?;
 
         let surface_capabilities = surface.get_capabilities(&adapter);
 
@@ -131,6 +140,8 @@ impl EmulatorWindow {
             device: Arc::new(device),
             queue: Arc::new(queue),
             window,
+            initial_render_complete: false,
+            window_focused: false,
         })
     }
 
@@ -418,9 +429,27 @@ impl EmulatorState {
                     _ => {}
                 }
             }
-            Event::AboutToWait => {
-                emu_thread.render_frame_if_available(&window.surface)?;
-            }
+            Event::AboutToWait => match emu_thread.render_frame_if_available(&window.surface)? {
+                SurfaceRenderEffect::FrameRendered { suboptimal } => {
+                    if suboptimal {
+                        window.surface.configure(&window.device, &window.surface_config);
+                    }
+
+                    if !window.initial_render_complete {
+                        window.initial_render_complete = true;
+                        window.window.set_visible(true);
+                    }
+
+                    if !window.window_focused {
+                        window.window.focus_window();
+                        window.window_focused = window.window.has_focus();
+                    }
+                }
+                SurfaceRenderEffect::SurfaceOutdated => {
+                    window.surface.configure(&window.device, &window.surface_config);
+                }
+                SurfaceRenderEffect::None => {}
+            },
             _ => {}
         }
 

@@ -1,13 +1,12 @@
 use crate::gpu::rasterizer::FrameCoords;
 use bytemuck::{Pod, Zeroable};
-use std::mem;
 use wgpu::{
     BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor,
     BindGroupLayoutEntry, BindingResource, BindingType, ColorTargetState, ColorWrites, Device,
     FragmentState, FrontFace, MultisampleState, PipelineCompilationOptions,
-    PipelineLayoutDescriptor, PolygonMode, PrimitiveState, PrimitiveTopology, PushConstantRange,
-    RenderPass, RenderPipeline, RenderPipelineDescriptor, ShaderStages, StorageTextureAccess,
-    Texture, TextureFormat, TextureViewDescriptor, TextureViewDimension, VertexState,
+    PipelineLayoutDescriptor, PolygonMode, PrimitiveState, PrimitiveTopology, RenderPass,
+    RenderPipeline, RenderPipelineDescriptor, ShaderStages, StorageTextureAccess, Texture,
+    TextureFormat, TextureViewDescriptor, TextureViewDimension, VertexState,
 };
 
 #[repr(C)]
@@ -67,11 +66,8 @@ impl TwentyFourBppPipeline {
 
         let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: "render_24bpp_pipeline_layout".into(),
-            bind_group_layouts: &[&bind_group_layout],
-            push_constant_ranges: &[PushConstantRange {
-                stages: ShaderStages::FRAGMENT,
-                range: 0..mem::size_of::<Render24BppArgs>() as u32,
-            }],
+            bind_group_layouts: &[Some(&bind_group_layout)],
+            immediate_size: size_of::<Render24BppArgs>() as u32,
         });
 
         let shader = device.create_shader_module(wgpu::include_wgsl!("24bpp.wgsl"));
@@ -80,7 +76,7 @@ impl TwentyFourBppPipeline {
             layout: Some(&pipeline_layout),
             vertex: VertexState {
                 module: &shader,
-                entry_point: "vs_main",
+                entry_point: Some("vs_main"),
                 compilation_options: PipelineCompilationOptions::default(),
                 buffers: &[],
             },
@@ -97,7 +93,7 @@ impl TwentyFourBppPipeline {
             multisample: MultisampleState::default(),
             fragment: Some(FragmentState {
                 module: &shader,
-                entry_point: "fs_main",
+                entry_point: Some("fs_main"),
                 compilation_options: PipelineCompilationOptions::default(),
                 targets: &[Some(ColorTargetState {
                     format: TextureFormat::Rgba8Unorm,
@@ -105,7 +101,7 @@ impl TwentyFourBppPipeline {
                     write_mask: ColorWrites::ALL,
                 })],
             }),
-            multiview: None,
+            multiview_mask: None,
             cache: None,
         });
 
@@ -120,7 +116,7 @@ impl TwentyFourBppPipeline {
         let args = Render24BppArgs::new(frame_coords);
 
         render_pass.set_pipeline(&self.pipeline);
-        render_pass.set_push_constants(ShaderStages::FRAGMENT, 0, bytemuck::cast_slice(&[args]));
+        render_pass.set_immediates(0, bytemuck::cast_slice(&[args]));
         render_pass.set_bind_group(0, &self.bind_group, &[]);
         render_pass.draw(0..4, 0..1);
     }
