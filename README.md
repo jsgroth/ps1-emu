@@ -1,3 +1,5 @@
+**This repository has moved to [Codeberg](https://codeberg.org/jsgroth/CoffeePSX)**
+
 # CoffeePSX
 
 Work-in-progress attempt at a PlayStation emulator.
